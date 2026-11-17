@@ -1,0 +1,15 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ channel: 'msedge' });
+const page = await (await browser.newContext({ viewport: { width: 1135, height: 700 }, deviceScaleFactor: 2 })).newPage();
+await page.goto('http://127.0.0.1:4182/', { waitUntil: 'networkidle' });
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(400);
+await page.locator('[data-action="open-codex"]').first().click();
+await page.waitForTimeout(300);
+await page.locator('[data-action="codex-tab"][data-tab="talents"]').click();
+await page.waitForTimeout(400);
+const names = await page.evaluate(() => [...new Set(document.body.innerText.match(/石头人|青苔族|影族|余烬族|石民|苔客|影裔|火胎/g) || [])]);
+console.log('图鉴出现的种族名:', names.join(' / '));
+await page.screenshot({ path: 'tools/.talents.png', clip: {x:0,y:0,width:1135,height:560} });
+await browser.close();

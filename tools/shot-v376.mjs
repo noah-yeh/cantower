@@ -1,0 +1,32 @@
+/** v3.76 截图：数值条第一格 = 属性（方案 A 金盾） */
+import { chromium } from 'playwright-core';
+const URL = process.env.PROBE_URL || 'http://127.0.0.1:4182/';
+const browser = await chromium.launch({ channel: 'msedge', args: ['--mute-audio'] });
+const page = await (await browser.newContext({ viewport: { width: 430, height: 860 }, deviceScaleFactor: 2 })).newPage();
+await page.goto(URL, { waitUntil: 'networkidle' });
+await page.waitForTimeout(250);
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(300);
+await page.evaluate(async () => {
+  const meta = await import('/src/core/meta.js');
+  const roster = await import('/src/core/roster.js');
+  const save = await import('/src/core/save.js');
+  const m = meta.createMeta(20261111);
+  const a = roster.createCharacter({ classId: 'hunter', raceId: 'stone', seed: 3 });
+  a.status = 'idle';
+  m.roster = [a];
+  save.saveMeta(m);
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(350);
+await page.locator('[data-action="open-expedition"]').first().click();
+await page.waitForTimeout(300);
+await page.locator('.ex-card').first().click();
+await page.waitForTimeout(450);
+await page.screenshot({ path: 'tools/probe/v376-row.png' });
+await page.locator('.hp-v-attrs').click();
+await page.waitForTimeout(300);
+await page.screenshot({ path: 'tools/probe/v376-mask.png' });
+await browser.close();
+console.log('shot ok');

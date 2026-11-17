@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#161210" />
+  <title>残塔</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="残塔" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    /**
+     * 开机自愈（v3.9.3）。
+     *
+     * 症状：发版后刷新整页全黑、连报错都没有 —— 说明 ES Module 根本没跑起来
+     * （离线缓存里存着上一版的模块，或者存过一个 404）。
+     * 这时纯黑屏是最糟的失败方式：玩家不知道能做什么。
+     *
+     * 这里做三件事：
+     *  1. 监听脚本/模块加载失败 → 清掉 SW 与全部缓存，重载一次；
+     *  2. 4 秒后 #app 还是空的 → 同样自愈；
+     *  3. 自愈过一次还失败 → 给出可点的「清缓存重开」，不再黑着。
+     */
+    (function () {
+      var GUARD = 'canta-boot-recover';
+
+      /**
+       * 手动强制更新（v3.31）：链接后面加一个 reset=1 就清缓存重开。
+       *
+       * 为什么需要它：老玩家把游戏装到主屏后，可能一直跑着旧 sw + 旧模块，
+       * 页面里新写的"自动求更新"逻辑根本没机会执行 —— 只有从外面带一个
+       * 参数进来，才能打破这个循环。重开前先把 reset 抹掉，否则会无限刷。
+       */
+      if (/[?&]reset=1(?:&|$)/.test(location.search)) {
+        try {
+          var q = location.search.replace(/([?&])reset=1(&|$)/, '$1').replace(/[?&]$/, '');
+          history.replaceState(null, '', location.pathname + q + location.hash);
+        } catch (e) { /* 隐私模式忽略 */ }
+        wipeAndReload();
+        return;
+      }
+
+      function wipeAndReload() {
+        var jobs = [];
+        try {
+          if ('serviceWorker' in navigator) {
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+              return Promise.all(rs.map(function (r) { return r.unregister(); }));
+            }));
+          }
+          if (window.caches) {
+            jobs.push(caches.keys().then(function (ks) {
+              return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+            }));
+          }
+        } catch (e) { /* 隐私模式下 caches 可能直接抛错，照样重载 */ }
+        Promise.all(jobs).then(function () { location.reload(); }, function () { location.reload(); });
+      }
+
+      function showFallback() {
+        var app = document.getElementById('app');
+        if (!app || app.innerHTML.trim()) return;
+        app.innerHTML = ''
+          + '<div style="max-width:340px;margin:18vh auto 0;padding:0 22px;text-align:center;color:#e8dfd2;font-family:system-ui,-apple-system,sans-serif">'
+          + '  <div style="font-size:18px;letter-spacing:6px;margin-bottom:12px">没 能 加 载</div>'
+          + '  <div style="font-size:12px;line-height:1.8;color:#8b8378;margin-bottom:22px">'
+          + '    页面脚本没跑起来，多半是离线缓存里存着旧文件。<br>点下面清一次就好，存档不会丢。'
+          + '  </div>'
+          + '  <button id="boot-fix" style="width:100%;padding:13px;border-radius:10px;border:1px solid #c9a227;'
+          + '    background:#241d15;color:#e8c46a;font-size:14px;letter-spacing:2px">清缓存重开</button>'
+          + '</div>';
+        var btn = document.getElementById('boot-fix');
+        if (btn) {
+          btn.onclick = function () {
+            try { sessionStorage.removeItem(GUARD); } catch (e) {}
+            btn.textContent = '正在清理…';
+            wipeAndReload();
+          };
+        }
+      }
+
+      function recover(reason) {
+        var tried = false;
+        try { tried = sessionStorage.getItem(GUARD) === '1'; } catch (e) {}
+        if (tried) { showFallback(reason); return; }
+        try { sessionStorage.setItem(GUARD, '1'); } catch (e) {}
+        wipeAndReload();
+      }
+
+      // 脚本/样式标签级的加载失败（捕获阶段才拿得到）
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) { recover('asset'); return; }
+        if (/module|export|import/i.test(String((e && e.message) || ''))) recover('module');
+      }, true);
+
+      window.addEventListener('unhandledrejection', function (e) {
+        var msg = String((e && e.reason && e.reason.message) || (e && e.reason) || '');
+        if (/module|export|import/i.test(msg)) recover('module');
+      });
+
+      setTimeout(function () {
+        var app = document.getElementById('app');
+        if (app && !app.innerHTML.trim()) recover('empty');
+      }, 6000);
+    })();
+  </script>
+
+  <script type="module" src="src/ui/main.js"></script>
+  <script>
+    /**
+     * PWA：注册离线缓存。失败（如本地 http 环境）不影响游戏本身。
+     *
+     * v3.31：加"主动求更新"。v44 之前 sw 只在浏览器自己想起来的时候才更新，
+     * 玩家装到主屏后可能连着几天跑旧版本（新美术看不到、新代码没有），
+     * 而他又分不清是"没发版"还是"没更新"。现在每次打开都主动查一次，
+     * 新 sw 接管后自动重载一次 —— 只在本来就有 controller 时才刷，避免首访刷两遍。
+     */
+    if ('serviceWorker' in navigator
+      && (location.protocol === 'https:'
+        || location.hostname === 'localhost'
+        || location.hostname === '127.0.0.1')) {
+      var hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController || window.__swReloaded) return;
+        window.__swReloaded = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register('./sw.js').then(function (reg) {
+        reg.update().catch(function () {});
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') reg.update().catch(function () {});
+        });
+      }).catch(function () {});
+    }
+  </script>
+</body>
+</html>

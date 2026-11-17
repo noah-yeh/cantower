@@ -1,0 +1,27 @@
+# 依赖
+node_modules/
+
+# 运行/调试临时产物
+tmp/
+store/
+
+# 探针截图与生成中间图（体积大，可由 tools/ 重新生成）
+tools/probe/
+tools/shots/
+素材生成/
+
+# 参考素材：含《了不起魔塔》等他人作品截图，仅本地对照用，不进仓库
+参照素材/
+
+# 发布标记与个人工作记录
+.wbapp_*.genie
+.workbuddy/
+.tmp-assets-check*.png
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 探针截图（散文件形态，同 probe/shots 目录一样不进仓库）
+.probe-*.png

@@ -1,0 +1,22 @@
+{
+  "name": "ruin-spire",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "残塔 — 竖屏肉鸽卡牌爬塔原型（对标《了不起魔塔》）",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "balance": "node tools/balance.mjs",
+    "arena": "node tools/arena-sim.mjs",
+    "trace": "node tools/trace.mjs",
+    "catalog": "node tools/export-catalog.mjs",
+    "catalog:xlsx": "python \"资料表/.残塔-素材数据总表.ref/build.py\"",
+    "serve": "node tools/serve.mjs",
+    "cloud": "node server/index.js",
+    "probe:cloud": "node tools/probe-cloud.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1",
+    "playwright-core": "^1.64.1"
+  }
+}

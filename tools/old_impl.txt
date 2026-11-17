@@ -1,0 +1,79 @@
+function enemyTurn(b) {
+  const e = b.enemy;
+  e.turn++;
+  e.hitThisTurn = 0;
+  pushLog(b, 'turn', '', `第 ${b.turn} 回合 · 敌方行动`);
+  if (!e.manual) drawEnemyHand(e, b.rng);
+  e.energy = enemyEnergyOf(e);
+  const maxPlays = e.maxPlays ?? CURVE.enemyMaxPlays;
+  let plays = 0;
+  let spentOut = false;
+  while (plays < maxPlays && b.phase === 'player') {
+    const pick = pickEnemyCard(e, b.rng);
+    if (!pick) { spentOut = true; break; }
+    e.hand.splice(pick.index, 1);
+    e.discard.push(pick.id);
+    e.energy -= pick.cost;
+    playEnemyCard(b, pick.id);
+    plays++;
+  }
+  if (b.phase === 'lost') return;
+  if (spentOut) {
+    pushLog(b, 'enemy', '', e.hand.length === 0 ? '无牌可出，结束回合' : '能量不足，结束回合');
+  }
+  applyTurnEndTraits(b);
+  if (e.turn > CURVE.enrageTurn) {
+    e.dmgMul = (e.dmgMul ?? 1) * (1 + CURVE.enragePct);
+    e.enraged++;
+  }
+  if (e.weakTurns > 0) e.weakTurns--;
+}
+
+export function endTurn(b) {
+  if (b.phase !== 'player') return [];
+  b.events = [];
+  b.notes = [];
+  for (const r of b.relics) r.onTurnEnd?.(b);
+  if (b.racePerk.energyToArmor && b.player.energy > 0) {
+    const gained = gainArmor(b, b.player.energy * b.racePerk.energyToArmor);
+    if (gained > 0) {
+      pushLog(b, 'turn', '', `光合：${b.player.energy} 点剩余能量化为 ${gained} 点护甲`);
+      b.notes.push(`光合 +${gained} 护甲`);
+    }
+    b.player.energy = 0;
+  }
+  const wounds = b.hand.filter((k) => cardOf(k)?.unplayable);
+  if (wounds.length > 0) {
+    b.exhaust.push(...wounds);
+    b.hand = b.hand.filter((k) => !cardOf(k)?.unplayable);
+    pushLog(b, 'turn', '', `${wounds.length} 张伤口结痂脱落`);
+  }
+  if (b.hand.length > 0 && b.turnPayoffs.length > 0) {
+    const n = b.hand.length;
+    const armorRatio = b.turnPayoffs.reduce((t, x) => t + (x.armor || 0), 0);
+    const poisonAdd = b.turnPayoffs.reduce((t, x) => t + (x.poison || 0), 0);
+    if (armorRatio > 0) {
+      const g = Math.round(armorRatio * n * atkMul(b.player.atk));
+      if (g > 0) { gainArmor(b, g); b.notes.push(`收势：${n} 张未打出 → +${g} 护甲`); }
+    }
+    if (poisonAdd > 0) {
+      const pg = Math.round(poisonAdd * n);
+      if (pg > 0) { b.enemy.poison += pg; b.events.push({ type: 'poison', value: b.enemy.poison }); b.notes.push(`收势：${n} 张未打出 → +${pg} 毒`); }
+    }
+  }
+  b.turnPayoffs = [];
+  b.discard.push(...b.hand);
+  b.hand = [];
+  enemyTurn(b);
+  if (b.phase === 'lost') return b.events;
+  if (b.enemy.hp > 0 && b.enemy.poison > 0) {
+    hitEnemy(b, b.enemy.poison, { pierce: true, noReflect: true });
+    if (!b.enemy.keepPoison) b.enemy.poison -= 1;
+    b.events.push({ type: 'poisonTick', value: b.enemy.poison });
+  }
+  checkEnemyDeath(b);
+  if (b.phase === 'won') return b.events;
+  b.turn++;
+  startTurn(b);
+  return b.events;
+}
